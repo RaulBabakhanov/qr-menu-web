@@ -2,10 +2,10 @@
 import { computed, ref } from 'vue'
 import * as XLSX from 'xlsx'
 import { AlertCircle, CheckCircle2, Download, FileCheck2, FileSpreadsheet, RotateCcw, UploadCloud } from 'lucide-vue-next'
-import { addStock } from '../services/stocks'
+import { createStockRemote } from '../services/stocks'
 
 type ImportRow={name:string;price:number;valid:boolean}
-const rows=ref<ImportRow[]>([]),imported=ref(false),error=ref(''),fileName=ref(''),dragging=ref(false)
+const rows=ref<ImportRow[]>([]),imported=ref(false),importing=ref(false),error=ref(''),fileName=ref(''),dragging=ref(false)
 const validRows=computed(()=>rows.value.filter(r=>r.valid)),invalidRows=computed(()=>rows.value.filter(r=>!r.valid))
 function normalizeHeader(v:unknown){return String(v??'').toLocaleLowerCase('tr-TR').replace(/ı/g,'i').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
 function parsePrice(v:unknown){if(typeof v==='number')return v;const t=String(v??'').replace(/₺|TL/gi,'').replace(/\s/g,'');if(!t)return 0;return Number(t.includes(',')?t.replace(/\./g,'').replace(',','.'):t)}
@@ -40,7 +40,13 @@ function parse(file?:File){
   reader.readAsArrayBuffer(file)
 }
 function drop(e:DragEvent){dragging.value=false;parse(e.dataTransfer?.files?.[0])}
-function importRows(){validRows.value.forEach(r=>addStock(r.name,r.price));imported.value=true}
+async function importRows(){
+  if(importing.value)return
+  importing.value=true;error.value=''
+  try { await Promise.all(validRows.value.map(r=>createStockRemote(r.name,r.price,'Ana Yemekler'))); imported.value=true }
+  catch(e){error.value=e instanceof Error?e.message:'Ürünler veritabanına aktarılamadı.'}
+  finally{importing.value=false}
+}
 function reset(){rows.value=[];fileName.value='';error.value='';imported.value=false}
 function downloadTemplate(){const b=XLSX.utils.book_new(),s=XLSX.utils.json_to_sheet([{'Stok Adı':'Adana Kebap',Fiyat:250},{'Stok Adı':'Ayran',Fiyat:40}]);XLSX.utils.book_append_sheet(b,s,'Ürünler');XLSX.writeFile(b,'qr-menu-urun-sablonu.xlsx')}
 </script>
@@ -56,7 +62,7 @@ function downloadTemplate(){const b=XLSX.utils.book_new(),s=XLSX.utils.json_to_s
     </section>
     <section class="excel-card preview-card"><div class="preview-head"><div><h3>Aktarım önizlemesi</h3><p>{{rows.length?`${rows.length} ürün satırı bulundu`:'Dosyanızdaki ürünler burada görünecek'}}</p></div><span v-if="rows.length" class="ready"><i></i>HAZIR</span></div>
       <div v-if="!rows.length" class="preview-empty"><span><FileSpreadsheet :size="31"/></span><h4>Henüz dosya seçilmedi</h4><p>Sol taraftan Excel dosyanızı yükleyerek başlayın.</p><button @click="downloadTemplate"><Download :size="14"/> Şablonu indir</button></div>
-      <div v-else class="preview-content"><div class="summary"><div><span>Geçerli ürün</span><strong>{{validRows.length}}</strong></div><div :class="{warning:invalidRows.length}"><span>Hatalı satır</span><strong>{{invalidRows.length}}</strong></div></div><div class="table-wrap"><table><thead><tr><th>Ürün adı</th><th>Fiyat</th><th>Durum</th></tr></thead><tbody><tr v-for="(row,i) in rows" :key="i"><td><b>{{row.name||'İsimsiz ürün'}}</b></td><td>{{row.price?`${row.price.toLocaleString('tr-TR')} ₺`:'—'}}</td><td><span :class="row.valid?'valid':'invalid'"><CheckCircle2 v-if="row.valid" :size="14"/><AlertCircle v-else :size="14"/>{{row.valid?'Uygun':'Kontrol et'}}</span></td></tr></tbody></table></div><button class="import-button" :disabled="!validRows.length||imported" @click="importRows"><CheckCircle2 :size="17"/>{{imported?'Ürünler başarıyla aktarıldı':`${validRows.length} ürünü menüye aktar`}}</button></div>
+      <div v-else class="preview-content"><div class="summary"><div><span>Geçerli ürün</span><strong>{{validRows.length}}</strong></div><div :class="{warning:invalidRows.length}"><span>Hatalı satır</span><strong>{{invalidRows.length}}</strong></div></div><div class="table-wrap"><table><thead><tr><th>Ürün adı</th><th>Fiyat</th><th>Durum</th></tr></thead><tbody><tr v-for="(row,i) in rows" :key="i"><td><b>{{row.name||'İsimsiz ürün'}}</b></td><td>{{row.price?`${row.price.toLocaleString('tr-TR')} ₺`:'—'}}</td><td><span :class="row.valid?'valid':'invalid'"><CheckCircle2 v-if="row.valid" :size="14"/><AlertCircle v-else :size="14"/>{{row.valid?'Uygun':'Kontrol et'}}</span></td></tr></tbody></table></div><button class="import-button" :disabled="!validRows.length||imported||importing" @click="importRows"><CheckCircle2 :size="17"/>{{importing?'Veritabanına aktarılıyor...':imported?'Ürünler başarıyla aktarıldı':`${validRows.length} ürünü menüye aktar`}}</button></div>
     </section>
   </div>
 </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ArrowUpRight, Clock3, Eye, Package, QrCode, Sparkles, TrendingUp } from 'lucide-vue-next'
-import { getStocks } from '../services/stocks'
+import { fetchStocks, getStocks } from '../services/stocks'
 import { getLastUpdated, getMenuViews } from '../services/dashboard'
 
 const stocks = ref(getStocks())
@@ -17,7 +17,7 @@ const lastUpdated = computed(() => {
   return minutes < 60 ? `${minutes} dk.` : `${Math.round(minutes / 60)} sa.`
 })
 function syncProfileName() { profileName.value = localStorage.getItem('qr-menu-profile-name') || '' }
-onMounted(() => { window.addEventListener('qr-menu-profile-updated', syncProfileName); stocks.value = getStocks(); menuViews.value = getMenuViews() })
+onMounted(async() => { window.addEventListener('qr-menu-profile-updated', syncProfileName); try{stocks.value=await fetchStocks()}catch{stocks.value=getStocks()} menuViews.value = getMenuViews() })
 onUnmounted(() => window.removeEventListener('qr-menu-profile-updated', syncProfileName))
 </script>
 
