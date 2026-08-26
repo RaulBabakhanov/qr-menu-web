@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Mail, QrCode, UserPlus, UtensilsCrossed } from 'lucide-vue-next'
 import '../login.css'
 import '../login-font.css'
+import { loginAccount, registerAccount } from '../services/auth'
 
 type Mode = 'login' | 'forgot' | 'register'
 const router = useRouter()
@@ -11,26 +12,17 @@ const mode = ref<Mode>('login'), email = ref(''), password = ref(''), remember =
 const resetEmail = ref(''), resetSent = ref(false)
 const company = ref(''), firstName = ref(''), lastName = ref(''), phone = ref(''), registerEmail = ref(''), registerPassword = ref('')
 
-function login() {
+async function login() {
   if (!email.value.trim() || !password.value.trim()) { error.value = 'E-posta ve şifre alanlarını doldurun.'; return }
-  const savedAccount = localStorage.getItem('qr-menu-account')
-  if (savedAccount) {
-    const account = JSON.parse(savedAccount) as { email:string; password:string; fullName:string }
-    if (account.email.toLocaleLowerCase('tr') === email.value.trim().toLocaleLowerCase('tr')) {
-      if (account.password !== password.value) { error.value = 'E-posta veya şifre hatalı.'; return }
-      localStorage.setItem('qr-menu-profile-name', account.fullName)
-      window.dispatchEvent(new Event('qr-menu-profile-updated'))
-    }
-  }
-  error.value = ''; router.push('/admin')
+  try { await loginAccount(email.value.trim(),password.value); error.value=''; router.push('/admin') }
+  catch(e) { error.value=e instanceof Error?e.message:'Giriş yapılamadı.' }
 }
 function changeMode(next: Mode) { mode.value = next; error.value = ''; resetSent.value = false; if (next === 'forgot') resetEmail.value = email.value }
 function sendReset() { if (resetEmail.value.trim()) resetSent.value = true }
-function register() {
+async function register() {
   if (!company.value || !firstName.value || !lastName.value || !registerEmail.value || !registerPassword.value) return
-  const fullName = `${firstName.value.trim()} ${lastName.value.trim()}`
-  localStorage.setItem('qr-menu-account', JSON.stringify({ company:company.value.trim(), fullName, email:registerEmail.value.trim(), phone:phone.value.trim(), password:registerPassword.value }))
-  email.value = registerEmail.value.trim(); password.value = ''; mode.value = 'login'
+  try { await registerAccount({company:company.value.trim(),firstName:firstName.value.trim(),lastName:lastName.value.trim(),email:registerEmail.value.trim(),phone:phone.value.trim(),password:registerPassword.value}); router.push('/admin') }
+  catch(e) { error.value=e instanceof Error?e.message:'Kayıt oluşturulamadı.' }
 }
 </script>
 

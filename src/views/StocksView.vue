@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Check, ImagePlus, PackageOpen, Pencil, Plus, Search, Snowflake, Trash2, X } from 'lucide-vue-next'
-import { addStock, clearStocks, getStocks, removeStock, updateStock } from '../services/stocks'
+import { clearStocksRemote, createStockRemote, fetchStocks, getStocks, removeStockRemote, updateStockRemote } from '../services/stocks'
 import type { Stock } from '../types'
 import '../photo.css'
 const stocks=ref(getStocks()),search=ref(''),modal=ref(false),editing=ref<Stock|null>(null),name=ref(''),price=ref<number|null>(null),image=ref(''),category=ref('Ana Yemekler')
@@ -9,12 +9,13 @@ const categories=['Ana Yemekler','Gün Menüleri','Kebaplar','Hamur İşleri','T
 const filtered=computed(()=>stocks.value.filter(s=>s.name.toLocaleLowerCase('tr').includes(search.value.toLocaleLowerCase('tr'))))
 const activeCount=computed(()=>stocks.value.filter(s=>s.status==='active').length)
 const money=(v:number)=>`${v.toLocaleString('tr-TR')} ₺`
+onMounted(async()=>{try{stocks.value=await fetchStocks()}catch(e){console.error(e)}})
 function openModal(s?:Stock){editing.value=s??null;name.value=s?.name??'';price.value=s?.price??null;image.value=s?.image??'';category.value=s?.category??'Ana Yemekler';modal.value=true}
 function selectImage(e:Event){const f=(e.target as HTMLInputElement).files?.[0];if(!f||f.size>3*1024*1024)return;const r=new FileReader();r.onload=()=>image.value=String(r.result);r.readAsDataURL(f)}
-function save(){if(!name.value.trim()||!price.value)return;if(editing.value)updateStock({...editing.value,name:name.value.trim(),price:price.value,category:category.value,image:image.value||undefined});else{const s=addStock(name.value.trim(),price.value,category.value);if(image.value)updateStock({...s,image:image.value})}stocks.value=getStocks();modal.value=false}
-function remove(id:number){if(confirm('Bu ürünü kalıcı olarak silmek istediğinize emin misiniz?')){removeStock(id);stocks.value=getStocks()}}
-function removeAll(){if(stocks.value.length&&confirm(`${stocks.value.length} ürünün tamamı kalıcı olarak silinecek. Devam etmek istiyor musunuz?`)){clearStocks();stocks.value=[]}}
-function toggle(s:Stock){updateStock({...s,status:s.status==='active'?'frozen':'active'});stocks.value=getStocks()}
+async function save(){if(!name.value.trim()||!price.value)return;try{if(editing.value)await updateStockRemote({...editing.value,name:name.value.trim(),price:price.value,category:category.value,image:image.value||undefined});else await createStockRemote(name.value.trim(),price.value,category.value,image.value||undefined);stocks.value=await fetchStocks();modal.value=false}catch(e){alert(e instanceof Error?e.message:'Ürün kaydedilemedi.')}}
+async function remove(id:number){if(confirm('Bu ürünü kalıcı olarak silmek istediğinize emin misiniz?')){await removeStockRemote(id);stocks.value=await fetchStocks()}}
+async function removeAll(){if(stocks.value.length&&confirm(`${stocks.value.length} ürünün tamamı kalıcı olarak silinecek. Devam etmek istiyor musunuz?`)){await clearStocksRemote();stocks.value=[]}}
+async function toggle(s:Stock){await updateStockRemote({...s,status:s.status==='active'?'frozen':'active'});stocks.value=await fetchStocks()}
 </script>
 <template>
 <div class="inventory-page">

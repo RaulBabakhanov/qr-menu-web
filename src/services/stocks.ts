@@ -1,5 +1,6 @@
 import type { Stock } from '../types'
 import { setLastUpdated } from './dashboard'
+import { authHeaders } from './auth'
 
 const seed: Stock[] = [
   { id: 1, name: 'Adana Kebap', price: 250, category: 'Ana Yemekler', createdAt: '2025-02-08', status: 'active' },
@@ -85,3 +86,15 @@ export function addStock(name: string, price: number, category = defaultCategory
 export function removeStock(id: number) { saveStocks(getStocks().filter(stock => stock.id !== id)) }
 export function clearStocks() { saveStocks([]) }
 export function updateStock(updated: Stock) { saveStocks(getStocks().map(stock => stock.id === updated.id ? updated : stock)) }
+
+async function api(path='',options:RequestInit={}) {
+  const response=await fetch(`/api/stocks${path}`,{...options,headers:{'Content-Type':'application/json',...authHeaders(),...(options.headers||{})}})
+  const data=await response.json().catch(()=>({}))
+  if(!response.ok) throw new Error(data.detail||'Ürün işlemi gerçekleştirilemedi.')
+  return data
+}
+export async function fetchStocks():Promise<Stock[]> { const items=await api(); saveStocks(items); return items }
+export async function createStockRemote(name:string,price:number,category:string,image?:string) { return api('',{method:'POST',body:JSON.stringify({name,price,category,image:image||null,status:'active'})}) as Promise<Stock> }
+export async function updateStockRemote(stock:Stock) { return api(`/${stock.id}`,{method:'PUT',body:JSON.stringify({name:stock.name,price:stock.price,category:stock.category,image:stock.image||null,status:stock.status})}) as Promise<Stock> }
+export async function removeStockRemote(id:number) { await api(`/${id}`,{method:'DELETE'}) }
+export async function clearStocksRemote() { await api('',{method:'DELETE'}) }
