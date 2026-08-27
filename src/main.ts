@@ -13,6 +13,7 @@ const router = createRouter({
     { path: '/admin/excel', component: () => import('./views/ExcelView.vue') },
     { path: '/admin/qr-menu', component: () => import('./views/QrMenuView.vue') },
     { path: '/admin/profil', component: () => import('./views/ProfileView.vue') },
+    { path: '/admin/ayarlar', component: () => import('./views/MenuSettingsView.vue') },
     { path: '/menu/:slug', component: () => import('./views/PublicMenuView.vue') },
   ],
 })

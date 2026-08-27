@@ -3,13 +3,14 @@ import { computed, onMounted, ref } from 'vue'
 import { Check, ImagePlus, PackageOpen, Pencil, Plus, Search, Snowflake, Trash2, X } from 'lucide-vue-next'
 import { clearStocksRemote, createStockRemote, fetchStocks, getStocks, removeStockRemote, updateStockRemote } from '../services/stocks'
 import type { Stock } from '../types'
+import { fetchCategories } from '../services/settings'
 import '../photo.css'
 const stocks=ref(getStocks()),search=ref(''),modal=ref(false),editing=ref<Stock|null>(null),name=ref(''),price=ref<number|null>(null),image=ref(''),category=ref('Ana Yemekler')
-const categories=['Ana Yemekler','Gün Menüleri','Kebaplar','Hamur İşleri','Tostlar','Kahvaltı','Çorbalar','Başlangıçlar','Atıştırmalıklar','Tatlılar','İçecekler']
+const categories=ref<string[]>(['Ana Yemekler'])
 const filtered=computed(()=>stocks.value.filter(s=>s.name.toLocaleLowerCase('tr').includes(search.value.toLocaleLowerCase('tr'))))
 const activeCount=computed(()=>stocks.value.filter(s=>s.status==='active').length)
 const money=(v:number)=>`${v.toLocaleString('tr-TR')} ₺`
-onMounted(async()=>{try{stocks.value=await fetchStocks()}catch(e){console.error(e)}})
+onMounted(async()=>{try{const [items,groups]=await Promise.all([fetchStocks(),fetchCategories()]);stocks.value=items;categories.value=groups.length?groups.map(group=>group.name):['Ana Yemekler']}catch(e){console.error(e)}})
 function openModal(s?:Stock){editing.value=s??null;name.value=s?.name??'';price.value=s?.price??null;image.value=s?.image??'';category.value=s?.category??'Ana Yemekler';modal.value=true}
 function selectImage(e:Event){const f=(e.target as HTMLInputElement).files?.[0];if(!f||f.size>3*1024*1024)return;const r=new FileReader();r.onload=()=>image.value=String(r.result);r.readAsDataURL(f)}
 async function save(){if(!name.value.trim()||!price.value)return;try{if(editing.value)await updateStockRemote({...editing.value,name:name.value.trim(),price:price.value,category:category.value,image:image.value||undefined});else await createStockRemote(name.value.trim(),price.value,category.value,image.value||undefined);stocks.value=await fetchStocks();modal.value=false}catch(e){alert(e instanceof Error?e.message:'Ürün kaydedilemedi.')}}

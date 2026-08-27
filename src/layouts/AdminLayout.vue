@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { FileSpreadsheet, LayoutDashboard, LogOut, Menu, Package, QrCode, UtensilsCrossed, X } from 'lucide-vue-next'
+import { FileSpreadsheet, LayoutDashboard, LogOut, Menu, Package, QrCode, Settings2, UtensilsCrossed, X } from 'lucide-vue-next'
 import '../profile.css'
 import '../upgrade.css'
 
@@ -10,9 +10,10 @@ const links = [
   { label:'Genel Bakış',to:'/admin',icon:LayoutDashboard },
   { label:'Ürünler',to:'/admin/stoklar',icon:Package },
   { label:'Excel Aktarımı',to:'/admin/excel',icon:FileSpreadsheet },
-  { label:'QR Menü',to:'/admin/qr-menu',icon:QrCode }
+  { label:'QR Menü',to:'/admin/qr-menu',icon:QrCode },
+  { label:'Menü Ayarları',to:'/admin/ayarlar',icon:Settings2 }
 ]
-const pageTitle = computed(() => route.path==='/admin'?'Genel Bakış':route.path.includes('stoklar')?'Ürünler':route.path.includes('excel')?'Excel Aktarımı':route.path.includes('profil')?'Profil':'QR Menü')
+const pageTitle = computed(() => route.path==='/admin'?'Genel Bakış':route.path.includes('stoklar')?'Ürünler':route.path.includes('excel')?'Excel Aktarımı':route.path.includes('profil')?'Profil':route.path.includes('ayarlar')?'Menü Ayarları':'QR Menü')
 function syncName(){profileName.value=localStorage.getItem('qr-menu-profile-name')||''}
 onMounted(()=>window.addEventListener('qr-menu-profile-updated',syncName))
 onUnmounted(()=>window.removeEventListener('qr-menu-profile-updated',syncName))
