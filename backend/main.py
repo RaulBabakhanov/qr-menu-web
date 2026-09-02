@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import DateTime, Float, ForeignKey, String, create_engine, delete, select, text
+from sqlalchemy import DateTime, Float, ForeignKey, String, create_engine, delete, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./qr_menu.db')
@@ -24,6 +24,7 @@ class User(Base):
     menu_logo: Mapped[str|None]=mapped_column(String,nullable=True)
     menu_banner: Mapped[str|None]=mapped_column(String,nullable=True)
     menu_title: Mapped[str|None]=mapped_column(String(180),nullable=True)
+    menu_theme: Mapped[str]=mapped_column(String(30),default='classic')
 class Stock(Base):
     __tablename__='stocks'
     id: Mapped[int]=mapped_column(primary_key=True); user_id: Mapped[int]=mapped_column(ForeignKey('users.id'),index=True)
@@ -39,6 +40,8 @@ class Category(Base):
     id: Mapped[int]=mapped_column(primary_key=True); user_id: Mapped[int]=mapped_column(ForeignKey('users.id'),index=True)
     name: Mapped[str]=mapped_column(String(100)); created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=lambda:datetime.now(timezone.utc))
 Base.metadata.create_all(engine)
+if 'menu_theme' not in {column['name'] for column in inspect(engine).get_columns('users')}:
+    with engine.begin() as connection: connection.execute(text("ALTER TABLE users ADD COLUMN menu_theme VARCHAR(30) DEFAULT 'classic'"))
 if DATABASE_URL.startswith('postgresql'):
     with engine.begin() as connection:
         for statement in [
@@ -60,7 +63,7 @@ class LoginInput(BaseModel): email:EmailStr; password:str
 class StockInput(BaseModel):
     name:str; price:float; category:str='Ana Yemekler'; status:str='active'; image:str|None=None
 class CategoryInput(BaseModel): name:str
-class MenuSettingsInput(BaseModel): company:str; menuTitle:str=''; logo:str|None=None; banner:str|None=None
+class MenuSettingsInput(BaseModel): company:str; menuTitle:str=''; logo:str|None=None; banner:str|None=None; theme:str='classic'
 def get_db():
     with SessionLocal() as db: yield db
 def hash_password(password):
@@ -73,7 +76,7 @@ def user_dict(u):
     start=u.license_start or datetime.now(timezone.utc); end=u.license_end or start+timedelta(days=365)
     remaining=max(0,(end.replace(tzinfo=timezone.utc)-datetime.now(timezone.utc)).days)
     return {'id':u.id,'company':u.company,'firstName':u.first_name,'lastName':u.last_name,'fullName':f'{u.first_name} {u.last_name}','email':u.email,'phone':u.phone,'slug':u.slug,
-            'licenseStart':start.isoformat(),'licenseEnd':end.isoformat(),'licenseDaysRemaining':remaining,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner}
+            'licenseStart':start.isoformat(),'licenseEnd':end.isoformat(),'licenseDaysRemaining':remaining,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner,'theme':u.menu_theme or 'classic'}
 def stock_dict(s): return {'id':s.id,'name':s.name,'price':s.price,'category':s.category,'status':s.status,'image':s.image,'createdAt':s.created_at.isoformat()}
 def issue_token(db,u):
     token=secrets.token_urlsafe(48); db.add(AuthSession(token=token,user_id=u.id,expires_at=datetime.now(timezone.utc)+timedelta(days=30))); db.commit()
@@ -142,7 +145,8 @@ def remove_category(category_id:int,u:User=Depends(current_user),db:Session=Depe
 def settings(u:User=Depends(current_user)): return user_dict(u)
 @app.put('/api/settings')
 def update_settings(item:MenuSettingsInput,u:User=Depends(current_user),db:Session=Depends(get_db)):
-    u.company=item.company.strip() or u.company; u.menu_title=item.menuTitle.strip() or u.company; u.menu_logo=item.logo; u.menu_banner=item.banner
+    allowed_themes={'classic','modern','ocean','terracotta','midnight','pastel'}
+    u.company=item.company.strip() or u.company; u.menu_title=item.menuTitle.strip() or u.company; u.menu_logo=item.logo; u.menu_banner=item.banner; u.menu_theme=item.theme if item.theme in allowed_themes else 'classic'
     db.commit(); return user_dict(u)
 @app.get('/api/menu/{slug}')
 def public_menu(slug:str,db:Session=Depends(get_db)):
@@ -150,4 +154,4 @@ def public_menu(slug:str,db:Session=Depends(get_db)):
     if not u: raise HTTPException(404,'Menü bulunamadı')
     items=db.scalars(select(Stock).where(Stock.user_id==u.id,Stock.status=='active')).all()
     categories=db.scalars(select(Category).where(Category.user_id==u.id).order_by(Category.id)).all()
-    return {'slug':slug,'business':u.company,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner,'categories':[c.name for c in categories],'stocks':[stock_dict(s) for s in items]}
+    return {'slug':slug,'business':u.company,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner,'theme':u.menu_theme or 'classic','categories':[c.name for c in categories],'stocks':[stock_dict(s) for s in items]}
