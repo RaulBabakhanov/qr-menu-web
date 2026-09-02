@@ -68,5 +68,6 @@ async function register() {
         <button class="back-login" @click="changeMode('login')"><ArrowLeft :size="15"/> Girişe dön</button>
       </template>
     </main>
+    <footer class="login-credit"><strong>Created by Raul Babakhanov</strong></footer>
   </div>
 </template>
