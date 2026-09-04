@@ -7,6 +7,8 @@ from sqlalchemy import DateTime, Float, ForeignKey, String, create_engine, delet
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./qr_menu.db')
+OWNER_EMAIL = os.getenv('OWNER_EMAIL', 'raul@gmail.com').lower().strip()
+ADMIN_PASSWORD_HASH = os.getenv('ADMIN_PASSWORD_HASH', '7f5da00bfb0b5661d946f93b3e1d09f6142c37371325b93775a7625055687b5a')
 if DATABASE_URL.startswith('postgresql://'):
     DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -82,12 +84,13 @@ class CategoryInput(BaseModel): name:str
 class MenuSettingsInput(BaseModel): company:str; menuTitle:str=''; logo:str|None=None; banner:str|None=None; theme:str='classic'
 class ManagementScheduleInput(BaseModel):
     licenseStart:datetime; licenseEnd:datetime; status:str='active'; frozenUntil:datetime|None=None
-class SystemAdminLoginInput(BaseModel): email:EmailStr; password:str
+class SystemAdminLoginInput(BaseModel): password:str
 def get_db():
     with SessionLocal() as db: yield db
 def system_admin(x_admin_key:str|None=Header(None)):
-    expected=os.getenv('ADMIN_PANEL_KEY','raul2005')
-    if not expected or not x_admin_key or not hmac.compare_digest(x_admin_key,expected): raise HTTPException(401,'Admin yetkisi gerekli')
+    expected=os.getenv('ADMIN_PANEL_KEY','')
+    valid=bool(x_admin_key) and (hmac.compare_digest(x_admin_key,expected) if expected else hmac.compare_digest(hashlib.sha256(x_admin_key.encode()).hexdigest(),ADMIN_PASSWORD_HASH))
+    if not valid: raise HTTPException(401,'Admin yetkisi gerekli')
     return True
 def hash_password(password):
     salt=secrets.token_bytes(16); digest=hashlib.pbkdf2_hmac('sha256',password.encode(),salt,310000)
@@ -95,6 +98,20 @@ def hash_password(password):
 def verify_password(password,encoded):
     salt,digest=encoded.split(':',1); actual=hashlib.pbkdf2_hmac('sha256',password.encode(),base64.b64decode(salt),310000)
     return hmac.compare_digest(actual,base64.b64decode(digest))
+def admin_password_valid(password):
+    expected=os.getenv('ADMIN_PANEL_KEY','')
+    return hmac.compare_digest(password,expected) if expected else hmac.compare_digest(hashlib.sha256(password.encode()).hexdigest(),ADMIN_PASSWORD_HASH)
+def ensure_owner_account(db,password):
+    u=db.scalar(select(User).where(User.email==OWNER_EMAIL))
+    if not u:
+        start=datetime.now(timezone.utc)
+        u=User(company='Raul QR Menü',first_name='Raul',last_name='Babakhanov',email=OWNER_EMAIL,phone='',password_hash=hash_password(password),slug='raul-qr-menu',license_start=start,license_end=start+timedelta(days=3650),menu_title='Raul QR Menü')
+        db.add(u); db.commit(); db.refresh(u)
+        for name in ['Ana Yemekler','Tatlılar','İçecekler']: db.add(Category(user_id=u.id,name=name))
+        db.commit()
+    elif not verify_password(password,u.password_hash):
+        u.password_hash=hash_password(password); db.commit()
+    return u
 def aware(value): return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 def log_event(db,user_id,action,detail='',ip=''):
     db.add(AuditLog(user_id=user_id,action=action,detail=detail[:500],ip_address=ip[:80]))
@@ -135,17 +152,7 @@ def register(data:RegisterInput,db:Session=Depends(get_db)):
 @app.post('/api/auth/login')
 def login(data:LoginInput,request:Request,db:Session=Depends(get_db)):
     email=data.email.lower().strip(); u=db.scalar(select(User).where(User.email==email))
-    owner_email=os.getenv('OWNER_EMAIL','raul@gmail.com').lower().strip()
-    owner_password=os.getenv('OWNER_PASSWORD','raul2005')
-    if email==owner_email and hmac.compare_digest(data.password,owner_password):
-        if not u:
-            start=datetime.now(timezone.utc)
-            u=User(company='Raul QR Menü',first_name='Raul',last_name='Babakhanov',email=owner_email,phone='',password_hash=hash_password(owner_password),slug='raul-qr-menu',license_start=start,license_end=start+timedelta(days=3650),menu_title='Raul QR Menü')
-            db.add(u); db.commit(); db.refresh(u)
-            for name in ['Ana Yemekler','Tatlılar','İçecekler']: db.add(Category(user_id=u.id,name=name))
-            db.commit()
-        elif not verify_password(owner_password,u.password_hash):
-            u.password_hash=hash_password(owner_password); db.commit()
+    if email==OWNER_EMAIL and admin_password_valid(data.password): u=ensure_owner_account(db,data.password)
     ip=request.client.host if request.client else ''
     if not u or not verify_password(data.password,u.password_hash):
         log_event(db,u.id if u else None,'login_failed',f'Başarısız giriş: {data.email}',ip); db.commit(); raise HTTPException(401,'E-posta veya şifre hatalı')
@@ -220,11 +227,10 @@ def update_management_schedule(item:ManagementScheduleInput,u:User=Depends(curre
     log_event(db,u.id,'schedule_updated',f'Durum: {item.status}, bitiş: {item.licenseEnd.isoformat()}'); db.commit(); return user_dict(u)
 
 @app.post('/api/system-admin/login')
-def system_admin_login(item:SystemAdminLoginInput):
-    expected_email=os.getenv('ADMIN_PANEL_EMAIL','raul@gmail.com')
-    expected_key=os.getenv('ADMIN_PANEL_KEY','raul2005')
-    if item.email.lower().strip()!=expected_email.lower() or not expected_key or not hmac.compare_digest(item.password,expected_key): raise HTTPException(401,'Admin bilgileri hatalı')
-    return {'key':expected_key,'admin':{'email':expected_email,'name':'Raul Babakhanov'}}
+def system_admin_login(item:SystemAdminLoginInput,db:Session=Depends(get_db)):
+    if not admin_password_valid(item.password): raise HTTPException(401,'Admin bilgileri hatalı')
+    user=ensure_owner_account(db,item.password); session=issue_token(db,user)
+    return {'key':item.password,'admin':{'email':OWNER_EMAIL,'name':'Raul Babakhanov'},**session}
 
 @app.get('/api/system-admin/overview',dependencies=[Depends(system_admin)])
 def system_admin_overview(db:Session=Depends(get_db)):

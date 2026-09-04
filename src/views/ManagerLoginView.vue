@@ -2,11 +2,10 @@
 import { ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Leaf, LockKeyhole, QrCode, ShieldCheck, UtensilsCrossed } from 'lucide-vue-next'
-import { loginAccount } from '../services/auth'
 import { loginSystemAdmin } from '../services/systemAdmin'
 
 const router=useRouter(),password=ref(''),show=ref(false),loading=ref(false),error=ref('')
-async function login(){loading.value=true;error.value='';try{await loginSystemAdmin(password.value);await loginAccount('raul@gmail.com',password.value);router.push('/yonetim')}catch(e){error.value=e instanceof Error?e.message:'Giriş yapılamadı'}finally{loading.value=false}}
+async function login(){loading.value=true;error.value='';try{await loginSystemAdmin(password.value);router.push('/yonetim')}catch(e){error.value=e instanceof Error?e.message:'Giriş yapılamadı'}finally{loading.value=false}}
 </script>
 
 <template><div class="manager-login">
