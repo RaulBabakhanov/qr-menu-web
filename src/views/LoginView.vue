@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Mail, QrCode, UserPlus, UtensilsCrossed } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Mail, QrCode, ShieldCheck, UserPlus, UtensilsCrossed } from 'lucide-vue-next'
 import '../login.css'
 import '../login-font.css'
 import { loginAccount, registerAccount } from '../services/auth'
@@ -44,6 +44,7 @@ async function register() {
           <button class="login-submit" type="submit">Giriş yap <ArrowRight :size="18"/></button>
         </form>
         <p class="account-switch">Henüz hesabınız yok mu? <button @click="changeMode('register')">Kayıt ol</button></p>
+        <RouterLink to="/yonetici" class="manager-entry"><ShieldCheck :size="15"/><span>Yönetici portalına geç</span><ArrowRight :size="14"/></RouterLink>
       </template>
 
       <template v-else-if="mode === 'forgot'">

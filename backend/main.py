@@ -86,7 +86,7 @@ class SystemAdminLoginInput(BaseModel): email:EmailStr; password:str
 def get_db():
     with SessionLocal() as db: yield db
 def system_admin(x_admin_key:str|None=Header(None)):
-    expected=os.getenv('ADMIN_PANEL_KEY','admin123' if DATABASE_URL.startswith('sqlite') else '')
+    expected=os.getenv('ADMIN_PANEL_KEY','raul2005')
     if not expected or not x_admin_key or not hmac.compare_digest(x_admin_key,expected): raise HTTPException(401,'Admin yetkisi gerekli')
     return True
 def hash_password(password):
@@ -134,7 +134,18 @@ def register(data:RegisterInput,db:Session=Depends(get_db)):
     db.commit(); return issue_token(db,u)
 @app.post('/api/auth/login')
 def login(data:LoginInput,request:Request,db:Session=Depends(get_db)):
-    u=db.scalar(select(User).where(User.email==data.email.lower().strip()))
+    email=data.email.lower().strip(); u=db.scalar(select(User).where(User.email==email))
+    owner_email=os.getenv('OWNER_EMAIL','raul@gmail.com').lower().strip()
+    owner_password=os.getenv('OWNER_PASSWORD','raul2005')
+    if email==owner_email and hmac.compare_digest(data.password,owner_password):
+        if not u:
+            start=datetime.now(timezone.utc)
+            u=User(company='Raul QR Menü',first_name='Raul',last_name='Babakhanov',email=owner_email,phone='',password_hash=hash_password(owner_password),slug='raul-qr-menu',license_start=start,license_end=start+timedelta(days=3650),menu_title='Raul QR Menü')
+            db.add(u); db.commit(); db.refresh(u)
+            for name in ['Ana Yemekler','Tatlılar','İçecekler']: db.add(Category(user_id=u.id,name=name))
+            db.commit()
+        elif not verify_password(owner_password,u.password_hash):
+            u.password_hash=hash_password(owner_password); db.commit()
     ip=request.client.host if request.client else ''
     if not u or not verify_password(data.password,u.password_hash):
         log_event(db,u.id if u else None,'login_failed',f'Başarısız giriş: {data.email}',ip); db.commit(); raise HTTPException(401,'E-posta veya şifre hatalı')
@@ -210,8 +221,8 @@ def update_management_schedule(item:ManagementScheduleInput,u:User=Depends(curre
 
 @app.post('/api/system-admin/login')
 def system_admin_login(item:SystemAdminLoginInput):
-    expected_email=os.getenv('ADMIN_PANEL_EMAIL','admin@gmail.com')
-    expected_key=os.getenv('ADMIN_PANEL_KEY','admin123' if DATABASE_URL.startswith('sqlite') else '')
+    expected_email=os.getenv('ADMIN_PANEL_EMAIL','raul@gmail.com')
+    expected_key=os.getenv('ADMIN_PANEL_KEY','raul2005')
     if item.email.lower().strip()!=expected_email.lower() or not expected_key or not hmac.compare_digest(item.password,expected_key): raise HTTPException(401,'Admin bilgileri hatalı')
     return {'key':expected_key,'admin':{'email':expected_email,'name':'Raul Babakhanov'}}
 

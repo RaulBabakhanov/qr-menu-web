@@ -8,6 +8,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/giris' },
     { path: '/giris', component: () => import('./views/LoginView.vue') },
+    { path: '/yonetici', component: () => import('./views/ManagerLoginView.vue') },
     { path: '/admin', component: () => import('./views/DashboardView.vue') },
     { path: '/admin/stoklar', component: () => import('./views/StocksView.vue') },
     { path: '/admin/excel', component: () => import('./views/ExcelView.vue') },

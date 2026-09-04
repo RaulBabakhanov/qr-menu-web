@@ -6,7 +6,7 @@ import ManagementLayout from './layouts/ManagementLayout.vue'
 
 const route = useRoute()
 const isPublicMenu = computed(() => route.path.startsWith('/menu/'))
-const isLogin = computed(() => route.path === '/giris')
+const isLogin = computed(() => route.path === '/giris' || route.path === '/yonetici')
 const isManagement = computed(() => route.path === '/yonetim')
 </script>
 
