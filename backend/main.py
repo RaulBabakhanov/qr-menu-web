@@ -29,6 +29,7 @@ class User(Base):
     menu_theme: Mapped[str]=mapped_column(String(30),default='classic')
     account_status: Mapped[str]=mapped_column(String(20),default='active')
     frozen_until: Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True)
+    created_at: Mapped[datetime|None]=mapped_column(DateTime(timezone=True),nullable=True,default=lambda:datetime.now(timezone.utc))
 class Stock(Base):
     __tablename__='stocks'
     id: Mapped[int]=mapped_column(primary_key=True); user_id: Mapped[int]=mapped_column(ForeignKey('users.id'),index=True)
@@ -58,6 +59,8 @@ with engine.begin() as connection:
     if 'menu_theme' not in user_columns: connection.execute(text("ALTER TABLE users ADD COLUMN menu_theme VARCHAR(30) DEFAULT 'classic'"))
     if 'account_status' not in user_columns: connection.execute(text("ALTER TABLE users ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'"))
     if 'frozen_until' not in user_columns: connection.execute(text("ALTER TABLE users ADD COLUMN frozen_until TIMESTAMP"))
+    if 'created_at' not in user_columns: connection.execute(text('ALTER TABLE users ADD COLUMN created_at TIMESTAMP'))
+    connection.execute(text('UPDATE users SET created_at=license_start WHERE created_at IS NULL'))
 if DATABASE_URL.startswith('postgresql'):
     with engine.begin() as connection:
         for statement in [
@@ -67,11 +70,13 @@ if DATABASE_URL.startswith('postgresql'):
             'ALTER TABLE users ADD COLUMN IF NOT EXISTS menu_banner TEXT',
             'ALTER TABLE users ADD COLUMN IF NOT EXISTS menu_title VARCHAR(180)',
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'",
-            'ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_until TIMESTAMPTZ']:
+            'ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_until TIMESTAMPTZ',
+            'ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ']:
             connection.execute(text(statement))
         connection.execute(text('UPDATE users SET license_start=NOW() WHERE license_start IS NULL'))
         connection.execute(text("UPDATE users SET license_end=license_start + INTERVAL '365 days' WHERE license_end IS NULL"))
         connection.execute(text('UPDATE users SET menu_title=company WHERE menu_title IS NULL'))
+        connection.execute(text('UPDATE users SET created_at=COALESCE(license_start, NOW()) WHERE created_at IS NULL'))
 
 app=FastAPI(title='QR Menu API')
 app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:5173'],allow_methods=['*'],allow_headers=['*'])
@@ -105,7 +110,7 @@ def ensure_owner_account(db,password):
     u=db.scalar(select(User).where(User.email==OWNER_EMAIL))
     if not u:
         start=datetime.now(timezone.utc)
-        u=User(company='Raul QR Menü',first_name='Raul',last_name='Babakhanov',email=OWNER_EMAIL,phone='',password_hash=hash_password(password),slug='raul-qr-menu',license_start=start,license_end=start+timedelta(days=3650),menu_title='Raul QR Menü')
+        u=User(company='Raul QR Menü',first_name='Raul',last_name='Babakhanov',email=OWNER_EMAIL,phone='',password_hash=hash_password(password),slug='raul-qr-menu',license_start=start,license_end=start+timedelta(days=3650),menu_title='Raul QR Menü',created_at=start)
         db.add(u); db.commit(); db.refresh(u)
         for name in ['Ana Yemekler','Tatlılar','İçecekler']: db.add(Category(user_id=u.id,name=name))
         db.commit()
@@ -121,9 +126,19 @@ def account_frozen(u):
 def user_dict(u):
     start=u.license_start or datetime.now(timezone.utc); end=u.license_end or start+timedelta(days=365)
     remaining=max(0,(end.replace(tzinfo=timezone.utc)-datetime.now(timezone.utc)).days)
+    registered=aware(u.created_at) or start
     return {'id':u.id,'company':u.company,'firstName':u.first_name,'lastName':u.last_name,'fullName':f'{u.first_name} {u.last_name}','email':u.email,'phone':u.phone,'slug':u.slug,
-            'licenseStart':start.isoformat(),'licenseEnd':end.isoformat(),'licenseDaysRemaining':remaining,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner,'theme':u.menu_theme or 'classic','status':u.account_status or 'active','frozenUntil':u.frozen_until.isoformat() if u.frozen_until else None}
+            'licenseStart':start.isoformat(),'licenseEnd':end.isoformat(),'licenseDaysRemaining':remaining,'menuTitle':u.menu_title or u.company,'logo':u.menu_logo,'banner':u.menu_banner,'theme':u.menu_theme or 'classic','status':u.account_status or 'active','frozenUntil':u.frozen_until.isoformat() if u.frozen_until else None,'registeredAt':registered.isoformat(),'protected':u.email==OWNER_EMAIL}
 def stock_dict(s): return {'id':s.id,'name':s.name,'price':s.price,'category':s.category,'status':s.status,'image':s.image,'createdAt':s.created_at.isoformat()}
+def overview_for(db,u):
+    total_views=db.scalar(select(func.count(MenuView.id)).where(MenuView.user_id==u.id)) or 0
+    today=datetime.now(timezone.utc).date(); daily=[]
+    for offset in range(6,-1,-1):
+        day=today-timedelta(days=offset); start=datetime.combine(day,datetime.min.time(),tzinfo=timezone.utc); end=start+timedelta(days=1)
+        count=db.scalar(select(func.count(MenuView.id)).where(MenuView.user_id==u.id,MenuView.created_at>=start,MenuView.created_at<end)) or 0
+        daily.append({'date':day.isoformat(),'count':count})
+    logs=db.scalars(select(AuditLog).where(AuditLog.user_id==u.id).order_by(AuditLog.id.desc()).limit(60)).all()
+    return {'account':user_dict(u),'metrics':{'totalViews':total_views,'products':db.scalar(select(func.count(Stock.id)).where(Stock.user_id==u.id)) or 0,'sessions':db.scalar(select(func.count(AuthSession.token)).where(AuthSession.user_id==u.id)) or 0},'dailyViews':daily,'logs':[{'id':x.id,'action':x.action,'detail':x.detail,'ip':x.ip_address,'createdAt':x.created_at.isoformat()} for x in logs]}
 def issue_token(db,u):
     token=secrets.token_urlsafe(48); db.add(AuthSession(token=token,user_id=u.id,expires_at=datetime.now(timezone.utc)+timedelta(days=30))); db.commit()
     return {'token':token,'user':user_dict(u)}
@@ -145,10 +160,10 @@ def register(data:RegisterInput,db:Session=Depends(get_db)):
     root=''.join(c if c.isalnum() else '-' for c in data.company.lower()).strip('-') or 'menu'; slug=root
     while db.scalar(select(User).where(User.slug==slug)): slug=f'{root}-{secrets.token_hex(2)}'
     start=datetime.now(timezone.utc)
-    u=User(company=data.company.strip(),first_name=data.firstName.strip(),last_name=data.lastName.strip(),email=email,phone=data.phone.strip(),password_hash=hash_password(data.password),slug=slug,license_start=start,license_end=start+timedelta(days=365),menu_title=data.company.strip())
+    u=User(company=data.company.strip(),first_name=data.firstName.strip(),last_name=data.lastName.strip(),email=email,phone=data.phone.strip(),password_hash=hash_password(data.password),slug=slug,license_start=start,license_end=start+timedelta(days=365),menu_title=data.company.strip(),created_at=start)
     db.add(u); db.commit(); db.refresh(u)
     for name in ['Ana Yemekler','Tatlılar','İçecekler']: db.add(Category(user_id=u.id,name=name))
-    db.commit(); return issue_token(db,u)
+    log_event(db,u.id,'account_registered',f'{u.company} / {u.first_name} {u.last_name}'); db.commit(); return issue_token(db,u)
 @app.post('/api/auth/login')
 def login(data:LoginInput,request:Request,db:Session=Depends(get_db)):
     email=data.email.lower().strip(); u=db.scalar(select(User).where(User.email==email))
@@ -210,14 +225,7 @@ def public_menu(slug:str,request:Request,db:Session=Depends(get_db)):
 
 @app.get('/api/management/overview')
 def management_overview(u:User=Depends(current_user),db:Session=Depends(get_db)):
-    total_views=db.scalar(select(func.count(MenuView.id)).where(MenuView.user_id==u.id)) or 0
-    today=datetime.now(timezone.utc).date(); daily=[]
-    for offset in range(6,-1,-1):
-        day=today-timedelta(days=offset); start=datetime.combine(day,datetime.min.time(),tzinfo=timezone.utc); end=start+timedelta(days=1)
-        count=db.scalar(select(func.count(MenuView.id)).where(MenuView.user_id==u.id,MenuView.created_at>=start,MenuView.created_at<end)) or 0
-        daily.append({'date':day.isoformat(),'count':count})
-    logs=db.scalars(select(AuditLog).where(AuditLog.user_id==u.id).order_by(AuditLog.id.desc()).limit(60)).all()
-    return {'account':user_dict(u),'metrics':{'totalViews':total_views,'products':db.scalar(select(func.count(Stock.id)).where(Stock.user_id==u.id)) or 0,'sessions':db.scalar(select(func.count(AuthSession.token)).where(AuthSession.user_id==u.id)) or 0},'dailyViews':daily,'logs':[{'id':x.id,'action':x.action,'detail':x.detail,'ip':x.ip_address,'createdAt':x.created_at.isoformat()} for x in logs]}
+    return overview_for(db,u)
 
 @app.put('/api/management/schedule')
 def update_management_schedule(item:ManagementScheduleInput,u:User=Depends(current_user),db:Session=Depends(get_db)):
@@ -243,6 +251,12 @@ def system_admin_overview(db:Session=Depends(get_db)):
     logs=db.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(100)).all(); user_map={x.id:x for x in users}
     return {'metrics':{'businesses':len(users),'active':sum(1 for x in users if not account_frozen(x)),'frozen':sum(1 for x in users if account_frozen(x)),'views':db.scalar(select(func.count(MenuView.id))) or 0},'users':result,'logs':[{'id':x.id,'userId':x.user_id,'company':user_map[x.user_id].company if x.user_id in user_map else 'Bilinmeyen','action':x.action,'detail':x.detail,'ip':x.ip_address,'createdAt':x.created_at.isoformat()} for x in logs]}
 
+@app.get('/api/system-admin/users/{user_id}',dependencies=[Depends(system_admin)])
+def system_admin_user(user_id:int,db:Session=Depends(get_db)):
+    user=db.get(User,user_id)
+    if not user: raise HTTPException(404,'İşletme bulunamadı')
+    return overview_for(db,user)
+
 @app.put('/api/system-admin/users/{user_id}/schedule',dependencies=[Depends(system_admin)])
 def system_admin_schedule(user_id:int,item:ManagementScheduleInput,db:Session=Depends(get_db)):
     user=db.get(User,user_id)
@@ -250,3 +264,18 @@ def system_admin_schedule(user_id:int,item:ManagementScheduleInput,db:Session=De
     if item.licenseEnd<=item.licenseStart: raise HTTPException(400,'Bitiş tarihi başlangıçtan sonra olmalı')
     user.license_start=item.licenseStart; user.license_end=item.licenseEnd; user.account_status=item.status; user.frozen_until=item.frozenUntil if item.status=='frozen' else None
     log_event(db,user.id,'system_admin_updated',f'Admin planı güncelledi: {item.status}'); db.commit(); return user_dict(user)
+
+@app.delete('/api/system-admin/users/{user_id}',dependencies=[Depends(system_admin)])
+def system_admin_delete_user(user_id:int,db:Session=Depends(get_db)):
+    user=db.get(User,user_id)
+    if not user: raise HTTPException(404,'İşletme bulunamadı')
+    if user.email==OWNER_EMAIL: raise HTTPException(400,'Sahip hesabı silinemez')
+    label=f'{user.company} / {user.first_name} {user.last_name}'
+    db.execute(delete(Stock).where(Stock.user_id==user_id))
+    db.execute(delete(Category).where(Category.user_id==user_id))
+    db.execute(delete(AuthSession).where(AuthSession.user_id==user_id))
+    db.execute(delete(MenuView).where(MenuView.user_id==user_id))
+    db.execute(delete(AuditLog).where(AuditLog.user_id==user_id))
+    db.delete(user)
+    log_event(db,None,'account_deleted',label); db.commit()
+    return {'ok':True}

@@ -1,37 +1,32 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Leaf, LockKeyhole, QrCode, ShieldCheck, UtensilsCrossed } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UtensilsCrossed } from 'lucide-vue-next'
+import '../login.css'
+import '../login-font.css'
 import { loginSystemAdmin } from '../services/systemAdmin'
 
 const router=useRouter(),password=ref(''),show=ref(false),loading=ref(false),error=ref('')
 async function login(){loading.value=true;error.value='';try{await loginSystemAdmin(password.value);router.push('/yonetim')}catch(e){error.value=e instanceof Error?e.message:'Giriş yapılamadı'}finally{loading.value=false}}
 </script>
 
-<template><div class="manager-login">
-  <div class="rings ring-top"></div><div class="rings ring-bottom"></div>
-  <RouterLink to="/giris" class="back"><ArrowLeft :size="16"/> İşletme girişine dön</RouterLink>
-  <main class="login-frame">
-    <section class="brand-panel">
-      <div class="brand"><span><UtensilsCrossed :size="21"/></span><div><strong>QR Menü</strong><small>Yönetim Merkezi</small></div></div>
-      <div class="brand-center"><div class="qr-orbit"><i></i><span><QrCode :size="62"/></span></div><h1>Kontrol sizde.</h1><p>Tüm işletmeler, yayınlar ve QR hareketleri tek bir güvenli merkezde.</p></div>
-      <div class="live"><i></i><span>Sistemler çevrimiçi</span><small>GÜVENLİ ERİŞİM</small></div>
-    </section>
-    <section class="form-panel">
-      <div class="mobile-brand"><span><Leaf :size="18"/></span><strong>QR Menü</strong></div>
-      <div class="form-wrap"><span class="eyebrow">GÜVENLİ YÖNETİCİ ERİŞİMİ</span><h2>Tekrar hoş<br/>geldiniz</h2><p>Devam etmek için yönetici bilgilerinizle giriş yapın.</p>
-        <form @submit.prevent="login">
-          <label>Yönetici şifresi<div class="password"><LockKeyhole :size="16"/><input v-model="password" :type="show?'text':'password'" placeholder="Şifrenizi girin" autocomplete="current-password" required/><button type="button" @click="show=!show"><EyeOff v-if="show" :size="18"/><Eye v-else :size="18"/></button></div></label>
-          <p v-if="error" class="error">{{error}}</p><button class="submit" :disabled="loading"><span>{{loading?'Doğrulanıyor...':'Panele giriş yap'}}</span><ArrowRight :size="19"/></button>
-        </form>
-        <div class="security"><ShieldCheck :size="17"/><div><strong>Korumalı oturum</strong><small>Bilgileriniz güvenli bağlantı üzerinden doğrulanır.</small></div></div>
-      </div>
-    </section>
-  </main><footer>Created by <strong>Raul Babakhanov</strong></footer>
-</div></template>
-
-<style scoped>
-.manager-login{--green:#0d3b2c;--green2:#145b42;min-height:100vh;position:relative;overflow:hidden;background:radial-gradient(circle at 82% 22%,#31805d55,transparent 28%),linear-gradient(135deg,#08291f,#104a37 58%,#0b3428);color:#fff;padding:70px 24px;display:grid;place-items:center}.manager-login:before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,#ffffff03,transparent 45%)}.rings{position:absolute;width:430px;height:430px;border:1px solid #ffffff0d;border-radius:50%;box-shadow:0 0 0 70px #ffffff08,0 0 0 140px #ffffff05}.ring-top{right:-170px;top:-250px}.ring-bottom{left:-240px;bottom:-250px}.back{position:absolute;z-index:3;left:clamp(24px,5vw,78px);top:30px;color:#c3d8ce;text-decoration:none;display:flex;align-items:center;gap:8px;font-size:11px}.back:hover{color:#fff}.login-frame{position:relative;z-index:2;width:min(1200px,100%);min-height:700px;display:grid;grid-template-columns:1.08fr .92fr;background:#fff;border:1px solid #ffffff8a;border-radius:30px;overflow:hidden;box-shadow:0 35px 100px #001a126e}.brand-panel{position:relative;overflow:hidden;padding:42px 48px;display:flex;flex-direction:column;background:radial-gradient(circle at 50% 54%,#23936b55,transparent 33%),linear-gradient(145deg,#0a3024,#126247);isolation:isolate}.brand-panel:before,.brand-panel:after{content:'';position:absolute;border-radius:50%;border:1px solid #ffffff16;z-index:-1}.brand-panel:before{width:560px;height:560px;left:50%;top:50%;transform:translate(-50%,-45%);box-shadow:0 0 0 65px #ffffff08,0 0 0 130px #ffffff05}.brand-panel:after{width:260px;height:260px;left:50%;top:50%;transform:translate(-50%,-40%);background:#071f1880;box-shadow:0 25px 80px #00150e80}.brand{display:flex;align-items:center;gap:12px}.brand>span,.mobile-brand>span{width:43px;height:43px;border-radius:12px;background:#fff;color:var(--green2);display:grid;place-items:center;box-shadow:0 10px 25px #00150f55}.brand strong,.brand small{display:block}.brand strong{font-size:17px}.brand small{font-size:9px;color:#9bc2ae;margin-top:3px;letter-spacing:.8px}.brand-center{margin:auto;text-align:center;max-width:420px}.qr-orbit{width:225px;height:225px;margin:0 auto 33px;border-radius:50%;border:1px solid #ffffff44;display:grid;place-items:center;box-shadow:0 0 0 34px #ffffff09,0 0 55px #62d39a2b;position:relative}.qr-orbit:before,.qr-orbit:after{content:'';position:absolute;border-radius:50%;border:1px solid #75e1ae48}.qr-orbit:before{inset:25px}.qr-orbit:after{inset:52px}.qr-orbit>span{width:92px;height:92px;border-radius:25px;background:#fff;color:#12553e;display:grid;place-items:center;box-shadow:0 15px 45px #00160f88;z-index:1}.qr-orbit i{position:absolute;width:9px;height:9px;border-radius:50%;background:#8af0bd;top:10px;box-shadow:0 0 0 7px #8af0bd18,0 0 20px #8af0bd;animation:orbit 7s linear infinite;transform-origin:5px 102px}.brand-center h1{font:500 40px 'Playfair Display',serif;margin:0 0 10px}.brand-center p{font-size:12px;line-height:1.7;color:#b9d3c6;margin:0}.live{display:flex;align-items:center;gap:9px;font-size:9px;color:#c5dbd0}.live i{width:7px;height:7px;border-radius:50%;background:#72e5aa;box-shadow:0 0 0 5px #72e5aa16}.live small{margin-left:auto;color:#74aa90;font-size:7px;letter-spacing:1.4px}.form-panel{color:#173328;padding:48px 66px;display:flex;align-items:center;background:#fbfcfb}.form-wrap{width:100%;max-width:430px;margin:auto}.mobile-brand{display:none}.eyebrow{font-size:9px;color:#16825b;letter-spacing:2.2px;font-weight:900}.form-wrap h2{font-size:43px;line-height:1.03;letter-spacing:-1.7px;margin:14px 0 11px;color:#123326}.form-wrap>p{font-size:12px;color:#7c9086;margin:0 0 36px}.form-wrap label{display:block;font-size:11px;font-weight:800;color:#294b3d;margin:19px 0}.form-wrap label>input,.password{width:100%;height:55px;margin-top:9px;border:1px solid #cddbd4;border-radius:13px;background:#f5f8f6;transition:.2s}.form-wrap label>input{padding:0 16px;outline:0;color:#173328}.password{display:flex;align-items:center;padding-left:15px;color:#799286}.password input{flex:1;min-width:0;border:0;outline:0;background:transparent;padding:0 12px;color:#173328}.password button{height:100%;border:0;background:none;color:#7d9489;padding:0 15px;cursor:pointer}.form-wrap label>input:focus,.password:focus-within{border-color:#27a474;box-shadow:0 0 0 4px #27a47415;background:#fff}.error{font-size:10px;color:#c9483d;padding:10px 12px;background:#fff0ee;border-radius:9px}.submit{width:100%;height:57px;border:0;border-radius:13px;background:linear-gradient(135deg,#126044,#1c8a62);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 14px 30px #176b4d3b;transition:.2s}.submit:hover{transform:translateY(-2px);box-shadow:0 18px 38px #176b4d50}.submit:disabled{opacity:.65}.security{margin-top:24px;padding:14px;border:1px solid #dce7e1;border-radius:12px;background:#f7faf8;display:flex;align-items:center;gap:11px;color:#209066}.security strong,.security small{display:block}.security strong{font-size:9px;color:#315044}.security small{font-size:8px;color:#8a9d94;margin-top:3px}.manager-login footer{position:absolute;z-index:2;right:30px;bottom:20px;font-size:9px;color:#8fbaa5}@keyframes orbit{to{transform:rotate(360deg)}}@media(max-width:850px){.manager-login{padding:70px 18px 40px}.login-frame{grid-template-columns:1fr;min-height:0;max-width:500px}.brand-panel{display:none}.form-panel{padding:34px 28px}.mobile-brand{display:flex;align-items:center;gap:10px;margin-bottom:35px}.mobile-brand>span{background:var(--green2);color:#fff;width:38px;height:38px}.form-wrap h2{font-size:36px}.manager-login footer{display:none}}@media(prefers-reduced-motion:reduce){.qr-orbit i{animation:none}}
-.manager-login footer{right:32px;bottom:20px;font-size:10px;color:#a8cdbb;letter-spacing:.25px}.manager-login footer strong{color:#e4f2eb;font-weight:700}
-@media(max-width:850px){.manager-login footer{display:block;right:18px;bottom:16px}}
-</style>
+<template>
+  <div class="login-page admin-login-page">
+    <div class="login-overlay"></div>
+    <header class="login-top">
+      <div class="login-brand"><span><UtensilsCrossed :size="20" /></span><strong>QR Menü<i>.</i></strong></div>
+      <RouterLink to="/giris" class="secure-note"><ArrowLeft :size="14"/> İşletme girişine dön</RouterLink>
+    </header>
+    <section class="login-intro"><h1>Kontrol her zaman<br /><em>elinizde.</em></h1></section>
+    <main class="login-card">
+      <div class="card-mark"><ShieldCheck :size="21" /></div>
+      <div class="login-heading"><span>YÖNETİCİ GİRİŞİ</span><h2>Tekrar hoş geldiniz</h2><p>Devam etmek için yönetici şifrenizle giriş yapın.</p></div>
+      <form @submit.prevent="login">
+        <label>Yönetici şifresi<div class="password-field"><LockKeyhole :size="16"/><input v-model="password" :type="show?'text':'password'" placeholder="Şifrenizi girin" autocomplete="current-password" required/><button type="button" @click="show=!show"><EyeOff v-if="show" :size="18"/><Eye v-else :size="18"/></button></div></label>
+        <p v-if="error" class="login-error">{{error}}</p>
+        <button class="login-submit" type="submit" :disabled="loading">{{loading?'Doğrulanıyor...':'Panele giriş yap'}} <ArrowRight :size="18"/></button>
+      </form>
+    </main>
+    <footer class="login-credit"><strong>Created by Raul Babakhanov</strong></footer>
+  </div>
+</template>
