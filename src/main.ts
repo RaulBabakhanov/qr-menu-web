@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/admin/qr-menu', component: () => import('./views/QrMenuView.vue') },
     { path: '/admin/profil', component: () => import('./views/ProfileView.vue') },
     { path: '/admin/ayarlar', component: () => import('./views/MenuSettingsView.vue') },
+    { path: '/admin/yonetim', component: () => import('./views/ManagementView.vue') },
     { path: '/menu/:slug', component: () => import('./views/PublicMenuView.vue') },
   ],
 })
