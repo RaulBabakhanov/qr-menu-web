@@ -5,15 +5,29 @@ import { Clock3, MapPin, Search, UtensilsCrossed, X } from 'lucide-vue-next'
 import { registerMenuView } from '../services/dashboard'
 import type { Stock } from '../types'
 
-const theme=ref('classic')
+const theme=ref('classic'),blocked=ref('')
 
 const search=ref(''),selectedCategory=ref('Tümü')
 const route=useRoute(),stocks=ref<Stock[]>([]),business=ref('QR Menü'),menuTitle=ref('QR Menü'),logo=ref(''),banner=ref(''),savedCategories=ref<string[]>([])
 const categories=computed(()=>['Tümü',...new Set([...savedCategories.value,...stocks.value.map(s=>s.category)])])
 const filtered=computed(()=>stocks.value.filter(s=>(selectedCategory.value==='Tümü'||s.category===selectedCategory.value)&&s.name.toLocaleLowerCase('tr').includes(search.value.toLocaleLowerCase('tr'))))
 const heroStyle=computed(()=>banner.value?{backgroundImage:`linear-gradient(90deg,#17201bea,#17201bc7),url(${banner.value})`}:undefined)
-onMounted(async()=>{try{const response=await fetch(`/api/menu/${encodeURIComponent(String(route.params.slug))}`);if(response.ok)theme.value=(await response.json()).theme||'classic'}catch{theme.value='classic'}})
-onMounted(async()=>{registerMenuView();try{const response=await fetch(`/api/menu/${encodeURIComponent(String(route.params.slug))}`);if(!response.ok)throw new Error();const data=await response.json();stocks.value=data.stocks||[];business.value=data.business||'QR Menü';menuTitle.value=data.menuTitle||business.value;logo.value=data.logo||'';banner.value=data.banner||'';savedCategories.value=data.categories||[]}catch{stocks.value=[]}})
+onMounted(async()=>{
+  registerMenuView()
+  try{
+    const response=await fetch(`/api/menu/${encodeURIComponent(String(route.params.slug))}`)
+    const data=await response.json().catch(()=>({}))
+    if(response.status===403){blocked.value=typeof data.detail==='string'?data.detail:'Menü şu an kullanılamıyor';return}
+    if(!response.ok)throw new Error()
+    theme.value=data.theme||'classic'
+    stocks.value=data.stocks||[]
+    business.value=data.business||'QR Menü'
+    menuTitle.value=data.menuTitle||business.value
+    logo.value=data.logo||''
+    banner.value=data.banner||''
+    savedCategories.value=data.categories||[]
+  }catch{blocked.value='Menü yüklenemedi'}
+})
 </script>
 
 <template>
@@ -22,6 +36,7 @@ onMounted(async()=>{registerMenuView();try{const response=await fetch(`/api/menu
   <main class="menu-main"><section class="menu-toolbar"><div><span>MENÜMÜZ</span><h2>Bugün ne yemek istersiniz?</h2></div><label class="menu-search"><Search :size="18"/><input v-model="search" placeholder="Menüde ara..."/><button v-if="search" @click="search=''" aria-label="Temizle"><X :size="15"/></button></label></section>
     <div class="category-tabs"><button v-for="category in categories" :key="category" :class="{active:selectedCategory===category}" @click="selectedCategory=category">{{category}}</button></div>
     <section v-if="filtered.length" class="menu-grid"><article v-for="stock in filtered" :key="stock.id" class="menu-item"><div class="item-image"><img v-if="stock.image" :src="stock.image" :alt="stock.name"/><div v-else><UtensilsCrossed :size="25"/></div><span>{{stock.category}}</span></div><div class="item-content"><div><h3>{{stock.name}}</h3><strong>{{stock.price.toLocaleString('tr-TR')}} ₺</strong></div><p>Özenle seçilen malzemelerle, siparişinize özel hazırlanır.</p></div></article></section>
+    <div v-else-if="blocked" class="menu-empty"><Clock3 :size="27"/><h3>{{blocked}}</h3><p>Yönetim panelinden hesabı aktif edin veya lisans tarihini uzatın.</p></div>
     <div v-else class="menu-empty"><Search :size="27"/><h3>Ürün bulunamadı</h3><p>Başka bir arama veya kategori deneyin.</p></div>
   </main>
   <footer><div class="restaurant-brand"><span><img v-if="logo" :src="logo"/><UtensilsCrossed v-else :size="17"/></span><b>{{business}}</b></div><p>Afiyet olsun · Bizi tercih ettiğiniz için teşekkür ederiz.</p></footer>

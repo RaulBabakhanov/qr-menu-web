@@ -1,5 +1,6 @@
 import base64, hashlib, hmac, os, secrets
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
@@ -117,12 +118,20 @@ def ensure_owner_account(db,password):
     elif not verify_password(password,u.password_hash):
         u.password_hash=hash_password(password); db.commit()
     return u
+APP_TZ=ZoneInfo('Europe/Istanbul')
 def aware(value): return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
+def local_date(value):
+    return aware(value).astimezone(APP_TZ).date() if value else None
 def log_event(db,user_id,action,detail='',ip=''):
     db.add(AuditLog(user_id=user_id,action=action,detail=detail[:500],ip_address=ip[:80]))
 def account_frozen(u):
     if (u.account_status or 'active')!='frozen': return False
     return not u.frozen_until or aware(u.frozen_until)>datetime.now(timezone.utc)
+def license_inactive(u):
+    today=datetime.now(APP_TZ).date()
+    start=local_date(u.license_start); end=local_date(u.license_end)
+    if start and today<start: return True
+    return bool(end and today>end)
 def user_dict(u):
     start=u.license_start or datetime.now(timezone.utc); end=u.license_end or start+timedelta(days=365)
     remaining=max(0,(end.replace(tzinfo=timezone.utc)-datetime.now(timezone.utc)).days)
@@ -217,7 +226,8 @@ def update_settings(item:MenuSettingsInput,u:User=Depends(current_user),db:Sessi
 def public_menu(slug:str,request:Request,db:Session=Depends(get_db)):
     u=db.scalar(select(User).where(User.slug==slug))
     if not u: raise HTTPException(404,'Menü bulunamadı')
-    if account_frozen(u) or (u.license_end and aware(u.license_end)<datetime.now(timezone.utc)): raise HTTPException(403,'Menü geçici olarak kullanılamıyor')
+    if account_frozen(u): raise HTTPException(403,'Menü geçici olarak donduruldu')
+    if license_inactive(u): raise HTTPException(403,'Menü süresi doldu')
     db.add(MenuView(user_id=u.id,slug=slug,ip_address=request.client.host if request.client else '')); db.commit()
     items=db.scalars(select(Stock).where(Stock.user_id==u.id,Stock.status=='active')).all()
     categories=db.scalars(select(Category).where(Category.user_id==u.id).order_by(Category.id)).all()
